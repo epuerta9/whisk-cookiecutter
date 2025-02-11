@@ -1,0 +1,77 @@
+"""LlamaIndex-based storage handler."""
+import tempfile
+from pathlib import Path
+from whisk.kitchenai_sdk.kitchenai import KitchenAIApp
+from whisk.kitchenai_sdk.schema import (
+    WhiskStorageSchema,
+    WhiskStorageResponseSchema,
+    TokenCountSchema
+)
+from llama_index.core import VectorStoreIndex, StorageContext, Document
+from llama_index.core.node_parser import TokenTextSplitter
+from llama_index.core.extractors import TitleExtractor, QuestionsAnsweredExtractor
+from kitchenai_llama.storage.llama_parser import Parser
+from ..utils.logging import logger
+from ..config import settings
+from .vector_store import VectorStoreManager
+
+class StorageHandler:
+    """LlamaIndex Storage Handler for document ingestion."""
+    def __init__(self, kitchen: KitchenAIApp):
+        self.kitchen = kitchen
+        self.vector_store = VectorStoreManager()
+        self._register_handlers()
+
+    def _register_handlers(self):
+        self.kitchen.storage.handler("storage")(self.handle_storage)
+        self.kitchen.storage.on_delete("storage")(self.handle_delete)
+
+    async def handle_storage(self, data: WhiskStorageSchema) -> WhiskStorageResponseSchema:
+        """Handle document storage using LlamaIndex."""
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_file_path = Path(temp_dir) / Path(data.name).name
+                
+                with open(temp_file_path, 'wb') as f:
+                    f.write(data.data)
+                
+                parser = Parser(api_key=settings.llama_cloud_api_key)
+                response = parser.load(str(temp_dir), metadata=data.metadata)
+                
+                storage_context = StorageContext.from_defaults(
+                    vector_store=self.vector_store.store
+                )
+                
+                VectorStoreIndex.from_documents(
+                    response["documents"],
+                    storage_context=storage_context,
+                    transformations=[
+                        TokenTextSplitter(),
+                        TitleExtractor(),
+                        QuestionsAnsweredExtractor()
+                    ],
+                    show_progress=True
+                )
+
+                token_counts = self.vector_store.get_token_counts()
+
+                return WhiskStorageResponseSchema(
+                    id=data.id,
+                    name=data.name,
+                    label=data.label,
+                    token_counts=TokenCountSchema(**token_counts),
+                    metadata={"token_counts": token_counts, **data.metadata} if data.metadata else {"token_counts": token_counts}
+                )
+                
+        except Exception as e:
+            logger.error(f"Error in storage handler: {str(e)}")
+            raise
+
+    async def handle_delete(self, data: WhiskStorageSchema) -> None:
+        """Handle document deletion."""
+        try:
+            # LlamaIndex doesn't provide direct deletion, so we'd need to implement custom logic
+            logger.info(f"Deleting storage for {data.id}")
+        except Exception as e:
+            logger.error(f"Error in delete handler: {str(e)}")
+            raise 

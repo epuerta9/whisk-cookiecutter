@@ -1,0 +1,127 @@
+"""CrewAI-based storage handler with Langchain integration."""
+import tempfile
+from pathlib import Path
+from whisk.kitchenai_sdk.kitchenai import KitchenAIApp
+from whisk.kitchenai_sdk.schema import (
+    WhiskStorageSchema,
+    WhiskStorageResponseSchema,
+    TokenCountSchema
+)
+from crewai import Agent, Task, Crew
+from langchain.document_loaders import UnstructuredFileLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.vectorstores import Chroma
+from langchain.callbacks import get_openai_callback
+from ..utils.logging import logger
+from ..config import settings
+
+class StorageHandler:
+    """CrewAI Storage Handler with document processing agents."""
+    def __init__(self, kitchen: KitchenAIApp):
+        self.kitchen = kitchen
+        self.embeddings = OpenAIEmbeddings()
+        self.vectorstore = Chroma(
+            persist_directory=settings.chroma_db_path,
+            embedding_function=self.embeddings
+        )
+        
+        # Initialize agents
+        self.processor = Agent(
+            role='Document Processor',
+            goal='Process and structure documents effectively',
+            backstory='Expert at analyzing and organizing document content',
+            verbose=True
+        )
+        
+        self.indexer = Agent(
+            role='Content Indexer',
+            goal='Create effective document indices',
+            backstory='Expert at organizing information for retrieval',
+            verbose=True
+        )
+        
+        self._register_handlers()
+
+    def _register_handlers(self):
+        self.kitchen.storage.handler("storage")(self.handle_storage)
+        self.kitchen.storage.on_delete("storage")(self.handle_delete)
+
+    async def handle_storage(self, data: WhiskStorageSchema) -> WhiskStorageResponseSchema:
+        """Handle document storage using CrewAI agents."""
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_file_path = Path(temp_dir) / Path(data.name).name
+                
+                with open(temp_file_path, 'wb') as f:
+                    f.write(data.data)
+                
+                # Create document processing task
+                process_task = Task(
+                    description=f"Process and structure the document at {temp_file_path}",
+                    agent=self.processor
+                )
+
+                # Create indexing task
+                index_task = Task(
+                    description="Create searchable index from the processed document",
+                    agent=self.indexer
+                )
+
+                # Create and run the crew
+                crew = Crew(
+                    agents=[self.processor, self.indexer],
+                    tasks=[process_task, index_task],
+                    verbose=True
+                )
+
+                # Process document and track token usage
+                with get_openai_callback() as cb:
+                    # Load and process document
+                    loader = UnstructuredFileLoader(str(temp_file_path))
+                    documents = loader.load()
+                    
+                    # Add metadata
+                    for doc in documents:
+                        doc.metadata.update(data.metadata or {})
+                    
+                    # Split and store documents
+                    text_splitter = RecursiveCharacterTextSplitter(
+                        chunk_size=1000,
+                        chunk_overlap=200
+                    )
+                    splits = text_splitter.split_documents(documents)
+                    self.vectorstore.add_documents(splits)
+                    
+                    # Run crew for additional processing
+                    crew.kickoff()
+
+                token_counts = {
+                    "embedding_tokens": cb.prompt_tokens,
+                    "llm_prompt_tokens": cb.prompt_tokens,
+                    "llm_completion_tokens": cb.completion_tokens,
+                    "total_llm_tokens": cb.total_tokens
+                }
+
+                return WhiskStorageResponseSchema(
+                    id=data.id,
+                    name=data.name,
+                    label=data.label,
+                    token_counts=TokenCountSchema(**token_counts),
+                    metadata={"token_counts": token_counts, **data.metadata} if data.metadata else {"token_counts": token_counts}
+                )
+                
+        except Exception as e:
+            logger.error(f"Error in storage handler: {str(e)}")
+            raise
+
+    async def handle_delete(self, data: WhiskStorageSchema) -> None:
+        """Handle document deletion."""
+        try:
+            self.vectorstore.delete(
+                where={"source": data.id}
+            )
+            logger.info(f"Deleted storage for {data.id}")
+        except Exception as e:
+            logger.error(f"Error in delete handler: {str(e)}")
+            raise 

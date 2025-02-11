@@ -1,0 +1,59 @@
+"""Langchain vector store manager."""
+import chromadb
+from langchain.vectorstores import Chroma
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.chat_models import ChatOpenAI
+from langchain.callbacks import get_openai_callback
+import tiktoken
+from ..config import settings
+
+class VectorStoreManager:
+    """Singleton manager for Langchain vector store and LLM resources."""
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(VectorStoreManager, cls).__new__(cls)
+            cls._instance._initialize()
+        return cls._instance
+
+    def _initialize(self):
+        """Initialize Langchain components."""
+        # Initialize embeddings
+        self.embeddings = OpenAIEmbeddings()
+        
+        # Initialize LLM
+        self.llm = ChatOpenAI(
+            model_name="gpt-3.5-turbo",
+            temperature=0
+        )
+
+        # Initialize vector store
+        {% if cookiecutter.use_persistent_chroma == "y" %}
+        self.store = Chroma(
+            persist_directory=settings.chroma_db_path,
+            embedding_function=self.embeddings
+        )
+        {% else %}
+        self.store = Chroma(
+            embedding_function=self.embeddings
+        )
+        {% endif %}
+
+        # Initialize token counter
+        self.token_counter = get_openai_callback()
+        self.token_counter.__enter__()
+
+    def get_token_counts(self):
+        """Get current token counts and reset counter."""
+        counts = {
+            "embedding_tokens": self.token_counter.prompt_tokens,  # Approximation
+            "llm_prompt_tokens": self.token_counter.prompt_tokens,
+            "llm_completion_tokens": self.token_counter.completion_tokens,
+            "total_llm_tokens": self.token_counter.total_tokens
+        }
+        # Reset counter by creating a new callback context
+        self.token_counter.__exit__(None, None, None)
+        self.token_counter = get_openai_callback()
+        self.token_counter.__enter__()
+        return counts 

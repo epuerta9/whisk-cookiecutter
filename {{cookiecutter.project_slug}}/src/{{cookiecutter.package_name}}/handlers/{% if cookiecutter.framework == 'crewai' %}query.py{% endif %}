@@ -1,0 +1,107 @@
+"""CrewAI-based query handler."""
+from whisk.kitchenai_sdk.kitchenai import KitchenAIApp
+from whisk.kitchenai_sdk.schema import (
+    WhiskQuerySchema,
+    WhiskQueryBaseResponseSchema,
+    TokenCountSchema,
+    SourceNodeSchema
+)
+from crewai import Agent, Task, Crew, Process
+from langchain.vectorstores import Chroma
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.callbacks import get_openai_callback
+from ..utils.logging import logger
+from ..config import settings
+
+class QueryHandler:
+    """CrewAI Query Handler for multi-agent question answering."""
+    def __init__(self, kitchen: KitchenAIApp):
+        self.kitchen = kitchen
+        self.embeddings = OpenAIEmbeddings()
+        self.vectorstore = Chroma(
+            persist_directory=settings.chroma_db_path,
+            embedding_function=self.embeddings
+        )
+        
+        # Initialize agents
+        self.researcher = Agent(
+            role='Research Analyst',
+            goal='Find accurate information from the knowledge base',
+            backstory='Expert at analyzing documents and finding relevant information',
+            allow_delegation=False,
+            verbose=True
+        )
+        
+        self.writer = Agent(
+            role='Technical Writer',
+            goal='Compose clear and accurate responses',
+            backstory='Expert at explaining complex topics clearly',
+            allow_delegation=False,
+            verbose=True
+        )
+        
+        self._register_handlers()
+
+    def _register_handlers(self):
+        self.kitchen.query.handler("query")(self.handle_query)
+
+    async def handle_query(self, data: WhiskQuerySchema) -> WhiskQueryBaseResponseSchema:
+        """Handle query using CrewAI multi-agent system."""
+        try:
+            # Retrieve relevant documents
+            docs = self.vectorstore.similarity_search(
+                data.query,
+                k=3,
+                filter=data.metadata
+            )
+            context = "\n\n".join([doc.page_content for doc in docs])
+
+            # Create tasks for the crew
+            research_task = Task(
+                description=f"Research this query using the provided context: {data.query}\n\nContext: {context}",
+                agent=self.researcher
+            )
+
+            writing_task = Task(
+                description="Write a clear and comprehensive response based on the research",
+                agent=self.writer
+            )
+
+            # Create and run the crew
+            crew = Crew(
+                agents=[self.researcher, self.writer],
+                tasks=[research_task, writing_task],
+                verbose=True
+            )
+
+            with get_openai_callback() as cb:
+                response = crew.kickoff()
+
+            # Create source nodes
+            source_nodes = [
+                SourceNodeSchema(
+                    text=doc.page_content,
+                    metadata=doc.metadata,
+                    score=1.0
+                )
+                for doc in docs
+            ]
+
+            # Create token counts
+            token_counts = {
+                "embedding_tokens": cb.prompt_tokens,  # Approximation
+                "llm_prompt_tokens": cb.prompt_tokens,
+                "llm_completion_tokens": cb.completion_tokens,
+                "total_llm_tokens": cb.total_tokens
+            }
+
+            return WhiskQueryBaseResponseSchema(
+                input=data.query,
+                output=response,
+                retrieval_context=source_nodes,
+                token_counts=TokenCountSchema(**token_counts),
+                metadata={"token_counts": token_counts, **data.metadata} if data.metadata else {"token_counts": token_counts}
+            )
+        except Exception as e:
+            logger.error(f"Error in query handler: {str(e)}")
+            raise 

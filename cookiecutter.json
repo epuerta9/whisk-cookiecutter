@@ -1,0 +1,19 @@
+{
+    "project_name": "My Whisk Client",
+    "project_slug": "{{ cookiecutter.project_name.lower().replace(' ', '_').replace('-', '_') }}",
+    "package_name": "{{ cookiecutter.project_slug.replace('-', '_') }}",
+    "client_id": "your-client-id",
+    "nats_url": "nats://nats.playground.kitchenai.dev",
+    "nats_user": "playground",
+    "nats_password": "kitchenai_playground",
+    "framework": ["llama-index", "langchain", "crewai", "smol-agents"],
+    "include_query_handler": "y",
+    "include_storage_handler": "y",
+    "include_embed_handler": "y",
+    "use_persistent_chroma": "y",
+    "chroma_db_path": "chroma_db",
+    "_copy_without_render": [
+        "*.html",
+        "*.js"
+    ]
+} 

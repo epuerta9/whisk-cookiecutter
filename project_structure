@@ -1,0 +1,26 @@
+cookiecutter-whisk/
+├── cookiecutter.json
+└── {{cookiecutter.project_slug}}/
+    ├── pyproject.toml
+    ├── README.md
+    ├── src/
+    │   └── {{cookiecutter.package_name}}/
+    │       ├── __init__.py
+    │       ├── app.py
+    │       ├── config.py
+    │       ├── handlers/
+    │       │   ├── __init__.py
+    │       │   ├── vector_store.py
+    │       │   └── {% if cookiecutter.include_query_handler == 'y' %}query.py{% endif %}
+    │       │   └── {% if cookiecutter.include_storage_handler == 'y' %}storage.py{% endif %}
+    │       │   └── {% if cookiecutter.include_embed_handler == 'y' %}embed.py{% endif %}
+    │       └── utils/
+    │           ├── __init__.py
+    │           └── logging.py
+    └── tests/
+        ├── __init__.py
+        ├── conftest.py
+        ├── test_vector_store.py
+        └── {% if cookiecutter.include_query_handler == 'y' %}test_query_handler.py{% endif %}
+        └── {% if cookiecutter.include_storage_handler == 'y' %}test_storage_handler.py{% endif %}
+        └── {% if cookiecutter.include_embed_handler == 'y' %}test_embed_handler.py{% endif %}
