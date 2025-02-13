@@ -1,0 +1,11 @@
+{
+    "project_name": "Whisk React Chat Project",
+    "project_slug": "{{ cookiecutter.project_name.lower().replace(' ', '_') }}",
+    "project_description": "A ReAct-based chat project using Whisk",
+    "author_name": "Your Name",
+    "author_email": "your.email@example.com",
+    "python_version": ">=3.9,<4.0",
+    "version": "0.1.0",
+    "system_prompt": "You are a helpful AI assistant that uses tools to answer questions.",
+    "tools": ["search", "calculator", "weather"]
+} 

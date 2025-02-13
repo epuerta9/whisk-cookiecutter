@@ -1,0 +1,13 @@
+nats:
+  url: "nats://nats.playground.kitchenai.dev"
+  user: "playground" 
+  password: "kitchenai_playground"
+
+client:
+  id: "whisk_client"
+
+llm:
+  cloud_api_key: ""  # Set via environment variable LLAMA_CLOUD_API_KEY
+
+chroma:
+  path: "chroma_db" 

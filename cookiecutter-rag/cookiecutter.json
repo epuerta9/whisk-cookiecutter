@@ -1,0 +1,10 @@
+{
+  "project_name": "Whisk RAG Project",
+  "project_slug": "{{ cookiecutter.project_name.lower().replace(' ', '_') }}",
+  "project_description": "A RAG-based project using KitchenAI Whisk",
+  "author_name": "Your Name",
+  "author_email": "your.email@example.com",
+  "version": "0.1.0",
+  "python_version": ">=3.11",
+  "open_source_license": ["MIT", "BSD-3", "GNU GPL v3.0", "Apache Software License 2.0"]
+} 

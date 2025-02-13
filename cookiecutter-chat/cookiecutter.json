@@ -1,0 +1,11 @@
+{
+    "project_name": "Whisk Chat Project",
+    "project_slug": "{{ cookiecutter.project_name.lower().replace(' ', '_') }}",
+    "project_description": "A chat personality project using Whisk",
+    "author_name": "Your Name",
+    "author_email": "your.email@example.com",
+    "python_version": ">=3.9,<4.0",
+    "version": "0.1.0",
+    "personality": "Shakespeare",
+    "system_prompt": "You are a Shakespearean writing assistant who speaks in a Shakespearean style."
+} 

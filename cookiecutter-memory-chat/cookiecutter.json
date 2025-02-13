@@ -1,0 +1,12 @@
+{
+    "project_name": "Whisk Memory Chat Project",
+    "project_slug": "{{ cookiecutter.project_name.lower().replace(' ', '_') }}",
+    "project_description": "A Langchain memory-based chat project using Whisk",
+    "author_name": "Your Name",
+    "author_email": "your.email@example.com",
+    "python_version": ">=3.9,<4.0",
+    "version": "0.1.0",
+    "memory_type": "buffer",
+    "memory_k": 5,
+    "system_prompt": "You are a helpful AI assistant with memory of past conversations."
+} 
